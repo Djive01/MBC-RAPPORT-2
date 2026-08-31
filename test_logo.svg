@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+  
+  <!-- CMYK Circle Logo -->
+  <g transform="translate(45, 110) scale(1.15)">
+    <!-- Black Slice -->
+    <path d="M 50,30 A 90,90 0 0,0 20,120 A 90,90 0 0,0 50,210 L 55,210 L 55,30 Z" fill="#18181b"/>
+    <!-- Yellow Slice -->
+    <path d="M 60,25 L 90,15 L 90,225 L 60,215 Z" fill="#eab308"/>
+    <!-- Magenta Slice -->
+    <path d="M 96,10 C 145,10 175,50 175,120 C 175,190 145,230 96,230 Z" fill="#ec4899"/>
+    <!-- Cyan Slice -->
+    <path d="M 182,35 A 90,90 0 0,1 210,120 A 90,90 0 0,1 182,205 Z" fill="#0284c7"/>
+    
+    <!-- "mbc" Outline Text -->
+    <text x="215" y="145" font-family="Arial, sans-serif" font-weight="bold" font-size="115" fill="none" stroke="#ffffff" stroke-width="7" letter-spacing="-2">mbc</text>
+    <!-- "PRINT" Subtitle -->
+    <text x="220" y="195" font-family="Arial, sans-serif" font-weight="bold" font-size="30" fill="#ffffff" letter-spacing="14">PRINT</text>
+  </g>
+</svg>

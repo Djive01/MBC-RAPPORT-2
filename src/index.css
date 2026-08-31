@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@media print {
+  /* Reset html, body and root container for full document printing */
+  html, body, #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all elements on the screen by default */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Make ONLY the report content container and its children visible */
+  #printable-report-content,
+  #printable-report-content * {
+    visibility: visible !important;
+  }
+
+  /* Position the report document at the top-left of the paper */
+  #printable-report-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure elements marked print:hidden are strictly hidden */
+  .print\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm;
+  }
+}
+

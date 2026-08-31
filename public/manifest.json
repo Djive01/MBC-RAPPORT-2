@@ -1,0 +1,22 @@
+{
+  "short_name": "MBC Print",
+  "name": "MBC Print Manager",
+  "icons": [
+    {
+      "src": "pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "any",
+  "description": "Application de gestion de caisse, rapports journaliers, dépenses et créances."
+}

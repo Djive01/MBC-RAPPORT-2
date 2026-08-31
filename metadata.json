@@ -1,0 +1,8 @@
+{
+  "name": "Remix Rapport Journalier \u0026 Gestion de Caisse",
+  "description": "Application complète mbc print de gestion et suivi des rapports journaliers de recettes, dépenses, créances et ajustement de caisse en FC et USD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
