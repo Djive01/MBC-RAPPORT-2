@@ -52,34 +52,8 @@ import { AboutModal } from './components/AboutModal';
 function safeStorageParse<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(key);
-    if (!item) return fallback;
+    if (item === null || item === undefined) return fallback;
     return JSON.parse(item);
-  } catch (e) {
-    console.warn(`Error parsing localStorage for ${key}, using fallback`, e);
-    return fallback;
-  }
-}
-
-function safeStorageParseArray<T extends { id: string }>(key: string, fallback: T[]): T[] {
-  try {
-    const item = localStorage.getItem(key);
-    if (!item) return fallback;
-    const parsed = JSON.parse(item);
-    if (!Array.isArray(parsed)) return fallback;
-    
-    const existingIds = new Set(parsed.map((p: any) => p?.id));
-    const missingItems = fallback.filter((f) => !existingIds.has(f.id));
-    
-    // For August 2026 Limete reports & categories, update if existing had old placeholder values
-    const updatedParsed = parsed.map((p: any) => {
-      const matchingFallback = fallback.find((f) => f.id === p.id);
-      if (matchingFallback && (matchingFallback.id.startsWith('m-aug-') || matchingFallback.id.startsWith('cat-m-aug-'))) {
-        return matchingFallback;
-      }
-      return p;
-    });
-
-    return [...updatedParsed, ...missingItems];
   } catch (e) {
     console.warn(`Error parsing localStorage for ${key}, using fallback`, e);
     return fallback;
@@ -162,7 +136,7 @@ export default function App() {
 
   // Stock & Inventory State
   const [stockItems, setStockItems] = useState<StockItem[]>(() => {
-    return safeStorageParseArray('mbc_stock_items', INITIAL_STOCK_ITEMS);
+    return safeStorageParse('mbc_stock_items', INITIAL_STOCK_ITEMS);
   });
 
   const [movementLogs, setMovementLogs] = useState<StockMovementLog[]>(() => {
@@ -172,7 +146,7 @@ export default function App() {
   // Network LAN & Supabase Sync States
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [networkNodes, setNetworkNodes] = useState<NetworkNode[]>(() => {
-    return safeStorageParseArray('mbc_network_nodes', INITIAL_NETWORK_NODES);
+    return safeStorageParse('mbc_network_nodes', INITIAL_NETWORK_NODES);
   });
 
   const [supabaseConfig, setSupabaseConfig] = useState<SupabaseSyncConfig>(() => {
@@ -201,19 +175,19 @@ export default function App() {
 
   // Core Data States with localStorage persistence
   const [reports, setReports] = useState<DailyReportItem[]>(() => {
-    return safeStorageParseArray('mbc_daily_reports', INITIAL_DAILY_REPORTS);
+    return safeStorageParse('mbc_daily_reports', INITIAL_DAILY_REPORTS);
   });
 
   const [categories, setCategories] = useState<ExpenseCategoryItem[]>(() => {
-    return safeStorageParseArray('mbc_expense_categories', INITIAL_EXPENSE_CATEGORIES);
+    return safeStorageParse('mbc_expense_categories', INITIAL_EXPENSE_CATEGORIES);
   });
 
   const [receivables, setReceivables] = useState<ReceivableItem[]>(() => {
-    return safeStorageParseArray('mbc_receivables', INITIAL_RECEIVABLES);
+    return safeStorageParse('mbc_receivables', INITIAL_RECEIVABLES);
   });
 
   const [adjustments, setAdjustments] = useState<CashAdjustmentItem[]>(() => {
-    return safeStorageParseArray('mbc_cash_adjustments', INITIAL_CASH_ADJUSTMENTS);
+    return safeStorageParse('mbc_cash_adjustments', INITIAL_CASH_ADJUSTMENTS);
   });
 
   // Persist to localStorage

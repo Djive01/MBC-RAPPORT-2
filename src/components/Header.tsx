@@ -165,6 +165,11 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-xs text-slate-600 font-bold">
                   {activeShopId === 'lingwala' ? 'Imprimerie de Lingwala' : activeShopId === 'limete' ? 'Imprimerie de Limete' : 'Toutes les Imprimeries (Consolidé)'}
                 </span>
+
+                <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shadow-2xs" title="Toutes vos saisies, ajouts, modifications et suppressions sont sauvegardés immédiatement et automatiquement dans votre mémoire locale.">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Sauvegarde auto active
+                </span>
               </div>
             </div>
           </div>
