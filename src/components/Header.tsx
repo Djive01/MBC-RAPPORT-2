@@ -34,6 +34,7 @@ interface HeaderProps {
   currentUser: UserAccount | null;
   activeShopId: ShopId | 'all';
   setActiveShopId: (shopId: ShopId | 'all') => void;
+  onRequestChangeShop?: (shopId: ShopId | 'all') => void;
   selectedMonth?: string;
   onMonthChange?: (month: string) => void;
   availableMonths?: string[];
@@ -63,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   activeShopId,
   setActiveShopId,
+  onRequestChangeShop,
   selectedMonth = '07/2026',
   onMonthChange,
   availableMonths = ['07/2026', '08/2026'],
@@ -81,6 +83,17 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAboutModal,
   lowStockAlertCount = 0,
 }) => {
+  const handleShopClick = (target: ShopId | 'all') => {
+    if (onRequestChangeShop) {
+      onRequestChangeShop(target);
+    } else {
+      setActiveShopId(target);
+    }
+  };
+
+  const isLingwalaLocked = currentUser && currentUser.role !== 'admin' && currentUser.shopId !== 'lingwala' && currentUser.shopId !== 'all';
+  const isLimeteLocked = currentUser && currentUser.role !== 'admin' && currentUser.shopId !== 'limete' && currentUser.shopId !== 'all';
+  const isAllLocked = currentUser && currentUser.role !== 'admin';
 
   return (
     <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
@@ -238,42 +251,43 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Shop Selector Dropdown / Pills */}
             <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium">
               <button
-                onClick={() => setActiveShopId('lingwala')}
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center ${
+                onClick={() => handleShopClick('lingwala')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer ${
                   activeShopId === 'lingwala'
                     ? 'bg-blue-600 text-white shadow-sm font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Afficher le rapport de l'Imprimerie de Lingwala"
+                title={isLingwalaLocked ? "Accès protégé : mot de passe de Lingwala ou Admin requis" : "Afficher le rapport de l'Imprimerie de Lingwala"}
               >
-                Lingwala
+                <span>Lingwala</span>
+                {isLingwalaLocked && <Lock className="w-3 h-3 text-slate-400" />}
               </button>
 
               <button
-                onClick={() => setActiveShopId('limete')}
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center ${
+                onClick={() => handleShopClick('limete')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer ${
                   activeShopId === 'limete'
                     ? 'bg-emerald-600 text-white shadow-sm font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Afficher le rapport de l'Imprimerie de Limete"
+                title={isLimeteLocked ? "Accès protégé : mot de passe de Limete ou Admin requis" : "Afficher le rapport de l'Imprimerie de Limete"}
               >
-                Limete
+                <span>Limete</span>
+                {isLimeteLocked && <Lock className="w-3 h-3 text-slate-400" />}
               </button>
 
-              {currentUser?.role === 'admin' && (
-                <button
-                  onClick={() => setActiveShopId('all')}
-                  className={`px-2.5 py-1 rounded-md transition-all flex items-center ${
-                    activeShopId === 'all'
-                      ? 'bg-purple-600 text-white shadow-sm font-semibold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Afficher la synthèse des deux imprimeries"
-                >
-                  Tous (Consolidé)
-                </button>
-              )}
+              <button
+                onClick={() => handleShopClick('all')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                  activeShopId === 'all'
+                    ? 'bg-purple-600 text-white shadow-sm font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title={isAllLocked ? "Accès Direction Admin requis : mot de passe requis" : "Afficher la synthèse des deux imprimeries"}
+              >
+                <span>Tous (Consolidé)</span>
+                {isAllLocked && <Lock className="w-3 h-3 text-slate-400" />}
+              </button>
             </div>
 
             {/* Taux de Change */}

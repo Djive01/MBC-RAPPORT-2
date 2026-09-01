@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Save, Store, Plus, Trash2, Receipt, Lock } from 'lucide-react';
-import { DailyReportItem, DetailedExpenseItem, ShopId } from '../types';
+import { X, Calendar, Save, Store, Plus, Trash2, Receipt, Lock, ShieldCheck } from 'lucide-react';
+import { DailyReportItem, DetailedExpenseItem, ShopId, UserAccount } from '../types';
 
 interface DailyEntryModalProps {
   isOpen: boolean;
@@ -8,6 +8,7 @@ interface DailyEntryModalProps {
   onSave: (report: Omit<DailyReportItem, 'id'> & { id?: string }) => void;
   editingReport?: DailyReportItem | null;
   defaultShopId: ShopId;
+  currentUser?: UserAccount | null;
 }
 
 export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
@@ -16,8 +17,12 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
   onSave,
   editingReport,
   defaultShopId,
+  currentUser,
 }) => {
-  const [shopId, setShopId] = useState<ShopId>(defaultShopId);
+  const isShopRestricted = currentUser && currentUser.role !== 'admin' && currentUser.shopId !== 'all';
+  const effectiveDefaultShop: ShopId = isShopRestricted ? (currentUser.shopId as ShopId) : defaultShopId;
+
+  const [shopId, setShopId] = useState<ShopId>(effectiveDefaultShop);
   const [date, setDate] = useState('');
   const [recettesFC, setRecettesFC] = useState<number | ''>('');
   const [recettesUSD, setRecettesUSD] = useState<number | ''>('');
@@ -33,7 +38,7 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
 
   useEffect(() => {
     if (editingReport) {
-      setShopId(editingReport.shopId || defaultShopId);
+      setShopId(isShopRestricted ? (currentUser.shopId as ShopId) : (editingReport.shopId || effectiveDefaultShop));
       setDate(editingReport.date);
       setRecettesFC(editingReport.recettesFC || '');
       setRecettesUSD(editingReport.recettesUSD || '');
@@ -59,7 +64,7 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
         setExpenseItems([]);
       }
     } else {
-      setShopId(defaultShopId);
+      setShopId(effectiveDefaultShop);
       setDate('01/08/2026');
       setRecettesFC('');
       setRecettesUSD('');
@@ -71,7 +76,7 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
       setExpenseItems([]);
     }
     setDateError('');
-  }, [editingReport, isOpen, defaultShopId]);
+  }, [editingReport, isOpen, effectiveDefaultShop, isShopRestricted, currentUser]);
 
   // Recalculate global expense totals when expense items change
   const handleUpdateExpenseItem = (index: number, field: keyof DetailedExpenseItem, value: any) => {
@@ -203,32 +208,57 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
           
           {/* Shop Selection */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-2 flex items-center">
-              <Store className="w-4 h-4 mr-1 text-indigo-600" />
-              Lieu d'Imprimerie / Shop
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase flex items-center">
+                <Store className="w-4 h-4 mr-1 text-indigo-600" />
+                Lieu d'Imprimerie / Shop
+              </label>
+              {isShopRestricted ? (
+                <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-indigo-600" />
+                  Verrouillé à votre compte ({currentUser?.name})
+                </span>
+              ) : (
+                <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-purple-600" />
+                  Accès Direction Admin (Tous Shops)
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
               <button
                 type="button"
+                disabled={isShopRestricted && currentUser?.shopId !== 'lingwala'}
                 onClick={() => setShopId('lingwala')}
                 className={`py-2 px-3 rounded-lg border flex items-center justify-center space-x-1.5 transition-all ${
                   shopId === 'lingwala'
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    : isShopRestricted && currentUser?.shopId !== 'lingwala'
+                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
                 }`}
+                title={isShopRestricted && currentUser?.shopId !== 'lingwala' ? "Accès restreint à votre shop Lingwala" : "Imprimerie Lingwala"}
               >
                 <span>Imprimerie LINGWALA</span>
+                {isShopRestricted && currentUser?.shopId !== 'lingwala' && <Lock className="w-3 h-3 text-slate-400 ml-1" />}
               </button>
+
               <button
                 type="button"
+                disabled={isShopRestricted && currentUser?.shopId !== 'limete'}
                 onClick={() => setShopId('limete')}
                 className={`py-2 px-3 rounded-lg border flex items-center justify-center space-x-1.5 transition-all ${
                   shopId === 'limete'
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    : isShopRestricted && currentUser?.shopId !== 'limete'
+                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
                 }`}
+                title={isShopRestricted && currentUser?.shopId !== 'limete' ? "Accès restreint à votre shop Limete" : "Imprimerie Limete"}
               >
                 <span>Imprimerie LIMETE</span>
+                {isShopRestricted && currentUser?.shopId !== 'limete' && <Lock className="w-3 h-3 text-slate-400 ml-1" />}
               </button>
             </div>
           </div>

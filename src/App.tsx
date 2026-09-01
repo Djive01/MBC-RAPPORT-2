@@ -47,6 +47,7 @@ import { NetworkAndCloudSyncModal } from './components/NetworkAndCloudSyncModal'
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SplashScreen } from './components/SplashScreen';
 import { AboutModal } from './components/AboutModal';
+import { PasswordPromptModal } from './components/PasswordPromptModal';
 
 // Safe localStorage parse helper
 function safeStorageParse<T>(key: string, fallback: T): T {
@@ -169,6 +170,8 @@ export default function App() {
   // Modals
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDailyModalOpen, setIsDailyModalOpen] = useState(false);
+  const [isShopSwitchModalOpen, setIsShopSwitchModalOpen] = useState(false);
+  const [pendingShopTarget, setPendingShopTarget] = useState<ShopId | 'all' | null>(null);
   const [editingReport, setEditingReport] = useState<DailyReportItem | null>(null);
   const [isPrintViewOpen, setIsPrintViewOpen] = useState(false);
   const [isElectronModalOpen, setIsElectronModalOpen] = useState(false);
@@ -356,6 +359,39 @@ export default function App() {
     addAuditLog('LOGIN', `Connexion réussie de l'utilisateur [${user.name}] avec accès au Shop ${user.shopName}.`);
   };
 
+  // Secure Cross-Shop Switch Handler with Password Protection
+  const handleRequestChangeShop = (targetShopId: ShopId | 'all') => {
+    // If user is Admin, instant unrestricted switch
+    if (currentUser?.role === 'admin') {
+      setActiveShopId(targetShopId);
+      addAuditLog('DATA_EDIT', `Basculement direct de l'administrateur vers le shop [${targetShopId}].`);
+      return;
+    }
+
+    // If target shop matches user's current assigned shop, switch immediately
+    if (currentUser && currentUser.shopId === targetShopId) {
+      setActiveShopId(targetShopId);
+      return;
+    }
+
+    // If user attempts to access another shop or consolidated view, prompt for target password
+    setPendingShopTarget(targetShopId);
+    setIsShopSwitchModalOpen(true);
+  };
+
+  const handleShopSwitchSuccess = (authenticatedUser?: UserAccount) => {
+    if (!pendingShopTarget) return;
+    const target = pendingShopTarget;
+    setIsShopSwitchModalOpen(false);
+
+    if (authenticatedUser) {
+      setCurrentUser(authenticatedUser);
+    }
+    setActiveShopId(target);
+    addAuditLog('LOGIN', `Accès sécurisé déverrouillé pour le shop [${target}] via le compte [${authenticatedUser?.name || 'Autorisé'}].`);
+    setPendingShopTarget(null);
+  };
+
   // Stock Handlers
   const handleAddStockItem = (newItem: Omit<StockItem, 'id'>) => {
     const item: StockItem = {
@@ -483,19 +519,24 @@ export default function App() {
     });
   }, [adjustments, activeShopId, selectedMonth, startDate, endDate]);
 
-  // Default Shop ID for new entries
-  const currentShopIdForNewEntry: ShopId = activeShopId === 'all' ? 'lingwala' : activeShopId;
+  // Default Shop ID for new entries - strictly locked to user's assigned shop if not admin
+  const isUserShopRestricted = currentUser && currentUser.role !== 'admin' && currentUser.shopId !== 'all';
+  const currentShopIdForNewEntry: ShopId = isUserShopRestricted
+    ? (currentUser.shopId as ShopId)
+    : (activeShopId === 'all' ? 'lingwala' : activeShopId);
 
   // Handlers for Daily Reports
   const handleSaveReport = (reportData: Omit<DailyReportItem, 'id'> & { id?: string }) => {
-    const targetShopId = reportData.shopId || currentShopIdForNewEntry;
+    const targetShopId: ShopId = isUserShopRestricted
+      ? (currentUser.shopId as ShopId)
+      : (reportData.shopId || currentShopIdForNewEntry);
     
     if (reportData.id) {
       // Edit existing
       setReports((prev) =>
         prev.map((r) => (r.id === reportData.id ? ({ ...reportData, shopId: targetShopId, id: reportData.id } as DailyReportItem) : r))
       );
-      addAuditLog('DATA_EDIT', `Modification du rapport de caisse du ${reportData.date} pour le shop ${targetShopId}.`);
+      addAuditLog('DATA_EDIT', `Modification du rapport de caisse du ${reportData.date} pour le shop [${targetShopId}].`);
     } else {
       // Add new
       const newReport: DailyReportItem = {
@@ -504,11 +545,11 @@ export default function App() {
         id: `report-${Date.now()}`,
       };
       setReports((prev) => [newReport, ...prev]);
-      addAuditLog('DATA_CREATE', `Saisie du rapport de caisse du ${reportData.date} (Recettes: ${reportData.recettesFC} FC / $${reportData.recettesUSD}).`);
+      addAuditLog('DATA_CREATE', `Saisie du rapport de caisse du ${reportData.date} (Recettes: ${reportData.recettesFC} FC / $${reportData.recettesUSD}) pour [${targetShopId}].`);
     }
 
-    // Auto switch active shop if user added for a different shop so they see their newly saved report
-    if (activeShopId !== 'all' && activeShopId !== targetShopId && !securityPolicy.restrictShopAccess) {
+    // Auto switch active shop if user added for a different shop so they see their newly saved report (only if admin or not restricted)
+    if (activeShopId !== 'all' && activeShopId !== targetShopId && !isUserShopRestricted) {
       setActiveShopId(targetShopId);
     }
 
@@ -549,13 +590,16 @@ export default function App() {
 
   // Handlers for Categories
   const handleAddCategory = (newCat: Omit<ExpenseCategoryItem, 'id'>) => {
+    const targetShopId: ShopId = isUserShopRestricted
+      ? (currentUser.shopId as ShopId)
+      : (newCat.shopId || currentShopIdForNewEntry);
     const item: ExpenseCategoryItem = {
       ...newCat,
-      shopId: newCat.shopId || currentShopIdForNewEntry,
+      shopId: targetShopId,
       id: `cat-${Date.now()}`,
     };
     setCategories((prev) => [...prev, item]);
-    addAuditLog('DATA_CREATE', `Ajout de la rubrique de dépense "${newCat.rubrique}" (${newCat.francs} FC / $${newCat.dollars}).`);
+    addAuditLog('DATA_CREATE', `Ajout de la rubrique de dépense "${newCat.rubrique}" (${newCat.francs} FC / $${newCat.dollars}) pour [${targetShopId}].`);
   };
 
   const handleEditCategory = (updatedCat: ExpenseCategoryItem) => {
@@ -599,13 +643,16 @@ export default function App() {
   };
 
   const handleAddReceivable = (newRec: Omit<ReceivableItem, 'id'>) => {
+    const targetShopId: ShopId = isUserShopRestricted
+      ? (currentUser.shopId as ShopId)
+      : (newRec.shopId || currentShopIdForNewEntry);
     const item: ReceivableItem = {
       ...newRec,
-      shopId: newRec.shopId || currentShopIdForNewEntry,
+      shopId: targetShopId,
       id: `rec-${Date.now()}`,
     };
     setReceivables((prev) => [...prev, item]);
-    addAuditLog('DATA_CREATE', `Création créance client "${newRec.client}" ($${newRec.amountUSD} / ${newRec.amountFC} FC).`);
+    addAuditLog('DATA_CREATE', `Création créance client "${newRec.client}" ($${newRec.amountUSD} / ${newRec.amountFC} FC) pour [${targetShopId}].`);
   };
 
   const handleEditReceivable = (updated: ReceivableItem) => {
@@ -619,13 +666,16 @@ export default function App() {
   };
 
   const handleAddAdjustment = (newAdj: Omit<CashAdjustmentItem, 'id'>) => {
+    const targetShopId: ShopId = isUserShopRestricted
+      ? (currentUser.shopId as ShopId)
+      : (newAdj.shopId || currentShopIdForNewEntry);
     const item: CashAdjustmentItem = {
       ...newAdj,
-      shopId: newAdj.shopId || currentShopIdForNewEntry,
+      shopId: targetShopId,
       id: `adj-${Date.now()}`,
     };
     setAdjustments((prev) => [...prev, item]);
-    addAuditLog('DATA_CREATE', `Enregistrement avance/sortie de caisse : "${newAdj.description}" à ${newAdj.targetEntity}.`);
+    addAuditLog('DATA_CREATE', `Enregistrement avance/sortie de caisse : "${newAdj.description}" à ${newAdj.targetEntity} pour [${targetShopId}].`);
   };
 
   const handleEditAdjustment = (updated: CashAdjustmentItem) => {
@@ -708,14 +758,8 @@ export default function App() {
         endDate={endDate}
         onDateRangeChange={handleDateRangeChange}
         onClearDateRange={handleClearDateRange}
-        setActiveShopId={(shopId) => {
-          if (securityPolicy.restrictShopAccess && currentUser?.role !== 'admin' && shopId !== currentUser?.shopId) {
-            alert('Accès restreint par politique de sécurité : vous êtes assigné exclusivement à votre imprimerie.');
-            return;
-          }
-          setActiveShopId(shopId);
-          addAuditLog('DATA_EDIT', `Bascule de la vue active sur l'imprimerie [${shopId}].`);
-        }}
+        setActiveShopId={setActiveShopId}
+        onRequestChangeShop={handleRequestChangeShop}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
         onOpenAddModal={() => {
           setEditingReport(null);
@@ -767,6 +811,8 @@ export default function App() {
             endDate={endDate}
             onDateRangeChange={handleDateRangeChange}
             onClearDateRange={handleClearDateRange}
+            currentUser={currentUser}
+            accounts={accounts}
           />
         )}
 
@@ -942,6 +988,35 @@ export default function App() {
         onSave={handleSaveReport}
         editingReport={editingReport}
         defaultShopId={currentShopIdForNewEntry}
+        currentUser={currentUser}
+      />
+
+      {/* Cross-Shop Password Switch Modal */}
+      <PasswordPromptModal
+        isOpen={isShopSwitchModalOpen}
+        onClose={() => {
+          setIsShopSwitchModalOpen(false);
+          setPendingShopTarget(null);
+        }}
+        onSuccess={handleShopSwitchSuccess}
+        title={
+          pendingShopTarget === 'lingwala'
+            ? 'Accès Protégé - Imprimerie Lingwala'
+            : pendingShopTarget === 'limete'
+            ? 'Accès Protégé - Imprimerie Limete'
+            : 'Accès Protégé - Direction Générale (Tous Shops)'
+        }
+        description={
+          pendingShopTarget === 'lingwala'
+            ? "Veuillez saisir le mot de passe du gestionnaire Lingwala ou Administrateur pour ouvrir et modifier ce shop."
+            : pendingShopTarget === 'limete'
+            ? "Veuillez saisir le mot de passe du gestionnaire Limete ou Administrateur pour ouvrir et modifier ce shop."
+            : "Veuillez saisir le mot de passe Administrateur pour accéder à la vue consolidée de l'ensemble des shops."
+        }
+        targetShopId={pendingShopTarget === 'all' ? undefined : pendingShopTarget || undefined}
+        targetRole={pendingShopTarget === 'all' ? 'admin' : undefined}
+        accounts={accounts}
+        currentUser={currentUser}
       />
 
       {/* Electron Build Guide Modal */}

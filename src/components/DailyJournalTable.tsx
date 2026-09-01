@@ -16,7 +16,7 @@ import {
   ChevronUp,
   Receipt
 } from 'lucide-react';
-import { DailyReportItem } from '../types';
+import { DailyReportItem, UserAccount } from '../types';
 import { formatFC, formatUSD } from '../utils/formatters';
 import { PasswordPromptModal } from './PasswordPromptModal';
 import { formatMonthLabel, parseDateToTimestamp } from '../utils/monthUtils';
@@ -35,6 +35,8 @@ interface DailyJournalTableProps {
   endDate?: string;
   onDateRangeChange?: (start: string, end: string) => void;
   onClearDateRange?: () => void;
+  currentUser?: UserAccount | null;
+  accounts?: UserAccount[];
 }
 
 export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
@@ -50,6 +52,8 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
   endDate = '',
   onDateRangeChange,
   onClearDateRange,
+  currentUser,
+  accounts = [],
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'work' | 'rest' | 'has_expenses' | 'high_revenue'>('all');
@@ -558,6 +562,25 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
         <p>Note: Les modifications et suppressions sont protégées par le système d'authentification par mot de passe.</p>
         <span className="font-bold text-slate-700">MBC Print © 2026</span>
       </div>
+
+      {/* Password Prompt for edit/delete */}
+      <PasswordPromptModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => {
+          setIsPasswordModalOpen(false);
+          setPendingAction(null);
+        }}
+        onSuccess={handlePasswordSuccess}
+        title={pendingAction?.type === 'edit' ? 'Modification de Rapport Protégée' : 'Suppression de Rapport Protégée'}
+        description={
+          pendingAction?.report
+            ? `Cette opération concerne l'Imprimerie de ${pendingAction.report.shopId === 'limete' ? 'Limete' : 'Lingwala'}. Entrez le mot de passe de ce shop ou le mot de passe Administrateur pour valider.`
+            : 'Entrez le mot de passe pour continuer.'
+        }
+        targetShopId={pendingAction?.report.shopId}
+        accounts={accounts}
+        currentUser={currentUser}
+      />
     </div>
   );
 };

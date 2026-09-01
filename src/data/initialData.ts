@@ -459,9 +459,9 @@ export const TARGET_PHYSICAL_CASH_FC = 3724650;
 
 export const DEFAULT_SECURITY_POLICY = {
   strictLoginMode: false,
-  requirePasswordOnDelete: false,
+  requirePasswordOnDelete: true,
   autoLockMinutes: 0,
-  restrictShopAccess: false,
+  restrictShopAccess: true, // Strict shop isolation with password access
 };
 
 export const INITIAL_AUDIT_LOGS = [
