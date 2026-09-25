@@ -34,7 +34,7 @@
     top: 0 !important;
     width: 100% !important;
     margin: 0 !important;
-    padding: 15px !important;
+    padding: 12px !important;
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
@@ -49,9 +49,31 @@
     visibility: hidden !important;
   }
 
+  /* Page breaks and formatting for multi-page printouts */
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Crisp SVG and chart rendering */
+  svg {
+    shape-rendering: geometricPrecision !important;
+    text-rendering: geometricPrecision !important;
+    max-width: 100% !important;
+  }
+
+  .recharts-wrapper {
+    margin: 0 auto !important;
+  }
+
   @page {
     size: A4 portrait;
-    margin: 10mm 10mm;
+    margin: 8mm 10mm;
   }
 }
 

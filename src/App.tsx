@@ -36,7 +36,7 @@ import { CashReconciliation } from './components/CashReconciliation';
 import { AnalyticsView } from './components/AnalyticsView';
 import { AiAssistantView } from './components/AiAssistantView';
 import { DailyEntryModal } from './components/DailyEntryModal';
-import { PrintReportView } from './components/PrintReportView';
+import { PrintReportView, PrintDocumentMode } from './components/PrintReportView';
 import { LoginModal } from './components/LoginModal';
 import { ElectronBuildModal } from './components/ElectronBuildModal';
 import { SecurityManagementModal } from './components/SecurityManagementModal';
@@ -174,6 +174,7 @@ export default function App() {
   const [pendingShopTarget, setPendingShopTarget] = useState<ShopId | 'all' | null>(null);
   const [editingReport, setEditingReport] = useState<DailyReportItem | null>(null);
   const [isPrintViewOpen, setIsPrintViewOpen] = useState(false);
+  const [printInitialMode, setPrintInitialMode] = useState<PrintDocumentMode>('financial');
   const [isElectronModalOpen, setIsElectronModalOpen] = useState(false);
 
   // Core Data States with localStorage persistence
@@ -765,7 +766,10 @@ export default function App() {
           setEditingReport(null);
           setIsDailyModalOpen(true);
         }}
-        onPrint={() => setIsPrintViewOpen(true)}
+        onPrint={() => {
+          setPrintInitialMode(activeTab === 'analytics' ? 'charts' : 'financial');
+          setIsPrintViewOpen(true);
+        }}
         onResetData={handleResetData}
         onOpenElectronModal={() => setIsElectronModalOpen(true)}
         onLockSession={() => {
@@ -890,6 +894,10 @@ export default function App() {
             endDate={endDate}
             onDateRangeChange={handleDateRangeChange}
             onClearDateRange={handleClearDateRange}
+            onPrintCharts={() => {
+              setPrintInitialMode('charts');
+              setIsPrintViewOpen(true);
+            }}
           />
         )}
 
@@ -1039,6 +1047,8 @@ export default function App() {
           receivables={filteredReceivables}
           adjustments={filteredAdjustments}
           activeShopId={activeShopId}
+          exchangeRate={exchangeRate}
+          initialMode={printInitialMode}
           selectedMonth={selectedMonth}
           onMonthChange={setSelectedMonth}
           availableMonths={availableMonths}
