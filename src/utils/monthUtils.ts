@@ -69,11 +69,10 @@ export function getAvailableMonths(reports: DailyReportItem[]): string[] {
     if (k) monthMap.add(k);
   });
 
-  // Ensure '07/2026' and current month are available if empty
-  if (monthMap.size === 0) {
-    monthMap.add('07/2026');
-    monthMap.add('08/2026');
-  }
+  // Ensure key operating months are always present in the selector
+  monthMap.add('07/2026');
+  monthMap.add('08/2026');
+  monthMap.add('09/2026');
 
   // Sort chronologically (YYYY, MM)
   const sorted = Array.from(monthMap).sort((a, b) => {

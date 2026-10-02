@@ -8,6 +8,14 @@ export interface DetailedExpenseItem {
   category?: string;
 }
 
+export interface DetailedIncomeItem {
+  id: string;
+  category: string; // "Impression et photocopie" | "DTF" | "Bâche" | "Polo" | "Fourniture" | "Autres" | string
+  motif?: string; // Optional custom details (e.g. "40 t-shirts floqués", "10m bâche 440g")
+  amountFC: number;
+  amountUSD: number;
+}
+
 export interface DailyReportItem {
   id: string;
   shopId: ShopId;
@@ -18,6 +26,7 @@ export interface DailyReportItem {
   depensesUSD: number;
   motifDepenses?: string; // Global motif summary or default
   expenseItems?: DetailedExpenseItem[]; // Detailed multi-expense line items per day
+  incomeItems?: DetailedIncomeItem[]; // Detailed multi-income category line items per day
   notes?: string;
   isRestDay?: boolean;
 }
@@ -98,6 +107,24 @@ export interface CashDenominationCount {
   usd10: number;
   usd5: number;
   usd1: number;
+}
+
+export interface CashAuditRecord {
+  id: string;
+  timestamp: string; // ISO timestamp
+  formattedDate: string; // DD/MM/YYYY HH:mm:ss
+  shopId: ShopId | 'all';
+  performedBy: string;
+  cashInHandFC: number;
+  cashInHandUSD: number;
+  theoreticalFC: number;
+  theoreticalUSD: number;
+  diffFC: number;
+  diffUSD: number;
+  diffCombinedFC: number;
+  comparisonScope: 'period' | 'day' | 'custom_target';
+  targetLabel: string;
+  notes?: string;
 }
 
 export interface StockItem {

@@ -79,18 +79,22 @@ export default function App() {
   const [exchangeRate, setExchangeRate] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('mbc_exchange_rate');
-      return saved ? Number(saved) || DEFAULT_EXCHANGE_RATE : DEFAULT_EXCHANGE_RATE;
+      if (!saved || saved === '2850') {
+        try { localStorage.setItem('mbc_exchange_rate', '2300'); } catch {}
+        return 2300;
+      }
+      return Number(saved) || 2300;
     } catch {
-      return DEFAULT_EXCHANGE_RATE;
+      return 2300;
     }
   });
   const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'dual' | 'fc' | 'usd'>('dual');
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('mbc_selected_month');
-      return saved || '08/2026';
+      return saved || '09/2026';
     } catch {
-      return '08/2026';
+      return '09/2026';
     }
   });
   const [startDate, setStartDate] = useState<string>('');
@@ -108,11 +112,26 @@ export default function App() {
   
   // Account & Shop Access State
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
-    return safeStorageParse('mbc_user_accounts', USER_ACCOUNTS);
+    const loaded = safeStorageParse<UserAccount[]>('mbc_user_accounts', USER_ACCOUNTS);
+    // Guarantee updated passwords
+    const updated = loaded.map((acc) => {
+      if (acc.id === 'lingwala') return { ...acc, password: 'Israel123' };
+      if (acc.id === 'limete') return { ...acc, password: 'Djive123' };
+      return acc;
+    });
+    safeSetItem('mbc_user_accounts', JSON.stringify(updated));
+    return updated;
   });
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    return safeStorageParse('mbc_current_user', USER_ACCOUNTS[0]);
+    const saved = safeStorageParse<UserAccount | null>('mbc_current_user', USER_ACCOUNTS[0]);
+    if (saved && saved.id === 'lingwala') {
+      return { ...saved, password: 'Israel123' };
+    }
+    if (saved && saved.id === 'limete') {
+      return { ...saved, password: 'Djive123' };
+    }
+    return saved;
   });
 
   const [activeShopId, setActiveShopId] = useState<ShopId | 'all'>(() => {
@@ -175,15 +194,48 @@ export default function App() {
   const [editingReport, setEditingReport] = useState<DailyReportItem | null>(null);
   const [isPrintViewOpen, setIsPrintViewOpen] = useState(false);
   const [printInitialMode, setPrintInitialMode] = useState<PrintDocumentMode>('financial');
+  const [printTargetDay, setPrintTargetDay] = useState<DailyReportItem | null>(null);
   const [isElectronModalOpen, setIsElectronModalOpen] = useState(false);
 
   // Core Data States with localStorage persistence
   const [reports, setReports] = useState<DailyReportItem[]>(() => {
-    return safeStorageParse('mbc_daily_reports', INITIAL_DAILY_REPORTS);
+    const saved = safeStorageParse<DailyReportItem[]>('mbc_daily_reports', INITIAL_DAILY_REPORTS);
+    if (Array.isArray(saved) && saved.length > 0) {
+      // Clean out any old temporary limete september entries and replace with official printed ones
+      const nonLimeteSep = saved.filter((r) => !(r.shopId === 'limete' && r.date.endsWith('/09/2026')));
+      const officialLimeteSep = INITIAL_DAILY_REPORTS.filter((r) => r.shopId === 'limete' && r.date.endsWith('/09/2026'));
+      
+      const currentIds = new Set(nonLimeteSep.map((r) => r.id));
+      const missingOtherInitial = INITIAL_DAILY_REPORTS.filter(
+        (r) => !currentIds.has(r.id) && !(r.shopId === 'limete' && r.date.endsWith('/09/2026'))
+      );
+
+      const merged = [...nonLimeteSep, ...missingOtherInitial, ...officialLimeteSep];
+      safeSetItem('mbc_daily_reports', JSON.stringify(merged));
+      return merged;
+    }
+    return INITIAL_DAILY_REPORTS;
   });
 
   const [categories, setCategories] = useState<ExpenseCategoryItem[]>(() => {
-    return safeStorageParse('mbc_expense_categories', INITIAL_EXPENSE_CATEGORIES);
+    const saved = safeStorageParse<ExpenseCategoryItem[]>('mbc_expense_categories', INITIAL_EXPENSE_CATEGORIES);
+    if (Array.isArray(saved) && saved.length > 0) {
+      // Replace old limete september categories with official printed categories
+      const nonLimeteSep = saved.filter((c) => !(c.shopId === 'limete' && c.id.startsWith('cat-m-sep-')));
+      const officialLimeteSep = INITIAL_EXPENSE_CATEGORIES.filter(
+        (c) => c.shopId === 'limete' && c.id.startsWith('cat-m-sep-')
+      );
+      
+      const currentIds = new Set(nonLimeteSep.map((c) => c.id));
+      const missingOtherInitial = INITIAL_EXPENSE_CATEGORIES.filter(
+        (c) => !currentIds.has(c.id) && !c.id.startsWith('cat-m-sep-')
+      );
+
+      const merged = [...nonLimeteSep, ...missingOtherInitial, ...officialLimeteSep];
+      safeSetItem('mbc_expense_categories', JSON.stringify(merged));
+      return merged;
+    }
+    return INITIAL_EXPENSE_CATEGORIES;
   });
 
   const [receivables, setReceivables] = useState<ReceivableItem[]>(() => {
@@ -193,6 +245,20 @@ export default function App() {
   const [adjustments, setAdjustments] = useState<CashAdjustmentItem[]>(() => {
     return safeStorageParse('mbc_cash_adjustments', INITIAL_CASH_ADJUSTMENTS);
   });
+
+  // Physical cash on hand states for automatic reconciliation & comparison
+  const [cashInHandFC, setCashInHandFC] = useState<number>(() => {
+    return safeStorageParse('mbc_cash_in_hand_fc', 0);
+  });
+  const [cashInHandUSD, setCashInHandUSD] = useState<number>(() => {
+    return safeStorageParse('mbc_cash_in_hand_usd', 0);
+  });
+  const [preselectedCashDay, setPreselectedCashDay] = useState<string | null>(null);
+
+  const handleReconcileDayCash = (report: DailyReportItem) => {
+    setPreselectedCashDay(report.date);
+    setActiveTab('cash');
+  };
 
   // Persist to localStorage
   useEffect(() => {
@@ -589,6 +655,12 @@ export default function App() {
     setIsDailyModalOpen(true);
   };
 
+  const handlePrintDayReport = (report: DailyReportItem) => {
+    setPrintTargetDay(report);
+    setPrintInitialMode('daily');
+    setIsPrintViewOpen(true);
+  };
+
   // Handlers for Categories
   const handleAddCategory = (newCat: Omit<ExpenseCategoryItem, 'id'>) => {
     const targetShopId: ShopId = isUserShopRestricted
@@ -795,6 +867,8 @@ export default function App() {
           exchangeRate={exchangeRate}
           currencyDisplayMode={currencyDisplayMode}
           onNavigateTab={setActiveTab}
+          cashInHandFC={cashInHandFC}
+          cashInHandUSD={cashInHandUSD}
         />
 
         {/* Tab 1: Daily Journal Table */}
@@ -817,6 +891,8 @@ export default function App() {
             onClearDateRange={handleClearDateRange}
             currentUser={currentUser}
             accounts={accounts}
+            onReconcileDayCash={handleReconcileDayCash}
+            onPrintDayReport={handlePrintDayReport}
           />
         )}
 
@@ -878,6 +954,20 @@ export default function App() {
             soldeTheoreticalFC={soldeTheoreticalFC}
             soldeTheoreticalUSD={soldeTheoreticalUSD}
             exchangeRate={exchangeRate}
+            reports={filteredReports}
+            activeShopId={activeShopId}
+            currentUser={currentUser}
+            selectedMonth={selectedMonth}
+            cashInHandFC={cashInHandFC}
+            cashInHandUSD={cashInHandUSD}
+            onUpdateCashInHand={(fc, usd) => {
+              setCashInHandFC(fc);
+              setCashInHandUSD(usd);
+              safeSetItem('mbc_cash_in_hand_fc', fc.toString());
+              safeSetItem('mbc_cash_in_hand_usd', usd.toString());
+            }}
+            preselectedDayDate={preselectedCashDay}
+            onClearPreselectedDay={() => setPreselectedCashDay(null)}
           />
         )}
 
@@ -997,6 +1087,7 @@ export default function App() {
         editingReport={editingReport}
         defaultShopId={currentShopIdForNewEntry}
         currentUser={currentUser}
+        selectedMonth={selectedMonth}
       />
 
       {/* Cross-Shop Password Switch Modal */}
@@ -1056,7 +1147,11 @@ export default function App() {
           endDate={endDate}
           onDateRangeChange={handleDateRangeChange}
           onClearDateRange={handleClearDateRange}
-          onClose={() => setIsPrintViewOpen(false)}
+          targetDayReport={printTargetDay}
+          onClose={() => {
+            setIsPrintViewOpen(false);
+            setPrintTargetDay(null);
+          }}
         />
       )}
 

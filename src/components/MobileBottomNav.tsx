@@ -8,7 +8,8 @@ import {
   Wifi,
   Plus,
   BarChart3,
-  MoreHorizontal
+  MoreHorizontal,
+  Calculator
 } from 'lucide-react';
 
 interface MobileBottomNavProps {
@@ -89,7 +90,18 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <span className="text-[10px] mt-0.5">Créances</span>
         </button>
 
-        {/* Tab 5: Sync Network/Cloud */}
+        {/* Tab 5: Caisse & Argent en Main */}
+        <button
+          onClick={() => setActiveTab('cash')}
+          className={`flex flex-col items-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'cash' ? 'text-indigo-400 font-bold bg-slate-800/80' : 'hover:text-slate-200'
+          }`}
+        >
+          <Calculator className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5">Caisse</span>
+        </button>
+
+        {/* Tab 6: Sync Network/Cloud */}
         <button
           onClick={onOpenSyncModal}
           className="flex flex-col items-center py-1 px-2.5 rounded-xl text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"

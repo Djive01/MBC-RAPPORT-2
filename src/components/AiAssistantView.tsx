@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   Bot, 
@@ -15,7 +15,8 @@ import {
   DollarSign,
   Store,
   Zap,
-  HelpCircle
+  HelpCircle,
+  Printer
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { DailyReportItem, ExpenseCategoryItem, ReceivableItem, CashAdjustmentItem, ShopId } from '../types';
@@ -47,11 +48,55 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'analysis' | 'chat'>('analysis');
   
-  // AI Analysis state
-  const [analysisResult, setAnalysisResult] = useState<string>('');
+  // AI Analysis state with persistence
+  const [analysisResult, setAnalysisResult] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`mbc_ai_analysis_${activeShopId}`) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [analysisSource, setAnalysisSource] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`mbc_ai_source_${activeShopId}`) || 'gemini';
+    } catch {
+      return 'gemini';
+    }
+  });
+  const [analysisNotice, setAnalysisNotice] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`mbc_ai_notice_${activeShopId}`) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [analysisTimestamp, setAnalysisTimestamp] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`mbc_ai_timestamp_${activeShopId}`) || '';
+    } catch {
+      return '';
+    }
+  });
+
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Sync state when shop changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`mbc_ai_analysis_${activeShopId}`);
+      if (saved) {
+        setAnalysisResult(saved);
+        setAnalysisSource(localStorage.getItem(`mbc_ai_source_${activeShopId}`) || 'gemini');
+        setAnalysisNotice(localStorage.getItem(`mbc_ai_notice_${activeShopId}`) || '');
+        setAnalysisTimestamp(localStorage.getItem(`mbc_ai_timestamp_${activeShopId}`) || '');
+      } else {
+        // If no saved analysis, generate automatically on shop switch
+        handleGenerateAnalysis();
+      }
+    } catch {}
+  }, [activeShopId]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -135,11 +180,22 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
 
       const data = await response.json();
 
-      if (!response.ok || data.error) {
-        throw new Error(data.error || "Erreur serveur lors de la génération de l'analyse.");
+      if (!response.ok || !data.result) {
+        throw new Error(data.error || "Erreur lors de la génération de l'analyse.");
       }
 
+      const timeStr = new Date().toLocaleDateString('fr-FR') + ' à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       setAnalysisResult(data.result);
+      setAnalysisSource(data.source || 'gemini');
+      setAnalysisNotice(data.notice || '');
+      setAnalysisTimestamp(timeStr);
+
+      try {
+        localStorage.setItem(`mbc_ai_analysis_${activeShopId}`, data.result);
+        localStorage.setItem(`mbc_ai_source_${activeShopId}`, data.source || 'gemini');
+        localStorage.setItem(`mbc_ai_notice_${activeShopId}`, data.notice || '');
+        localStorage.setItem(`mbc_ai_timestamp_${activeShopId}`, timeStr);
+      } catch {}
     } catch (err: any) {
       console.error('Error fetching AI analysis:', err);
       setAnalysisError(err.message || "Impossible de contacter l'assistant IA.");
@@ -147,6 +203,13 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
       setIsAnalyzing(false);
     }
   };
+
+  // Initial auto-generation on mount if no analysis exists
+  useEffect(() => {
+    if (!analysisResult) {
+      handleGenerateAnalysis();
+    }
+  }, []);
 
   const handleSendChatMessage = async (queryText?: string) => {
     const textToSend = (queryText || userQuery).trim();
@@ -176,7 +239,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
 
       const data = await response.json();
 
-      if (!response.ok || data.error) {
+      if (!response.ok || !data.result) {
         throw new Error(data.error || 'Erreur de génération de réponse.');
       }
 
@@ -192,7 +255,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         sender: 'ai',
-        text: `⚠️ **Désolé**, une erreur est survenue : ${err.message || "Problème d'accès à l'API Gemini."}`,
+        text: `⚠️ **Information** : ${err.message || "Problème temporaire de communication avec l'assistant."}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -206,6 +269,83 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
     navigator.clipboard.writeText(analysisResult);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePrintAnalysis = () => {
+    if (!analysisResult) return;
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8">
+          <title>Rapport Diagnostique Financier - MBC Print</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            @media print {
+              @page { size: A4 portrait; margin: 12mm 15mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .no-print { display: none !important; }
+            }
+            body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #ffffff; color: #0f172a; padding: 24px; }
+            h2 { font-size: 1.5rem; font-weight: 800; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; color: #1e1b4b; }
+            h3 { font-size: 1.15rem; font-weight: 700; margin-top: 18px; margin-bottom: 8px; color: #312e81; }
+            ul, ol { margin-left: 20px; margin-bottom: 12px; }
+            li { margin-bottom: 4px; }
+            p { margin-bottom: 8px; line-height: 1.5; }
+            hr { border-top: 1px solid #e2e8f0; margin: 16px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="no-print mb-6 text-center">
+            <button onclick="window.print()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md mr-3 cursor-pointer">
+              🖨️ Imprimer / Enregistrer en PDF
+            </button>
+            <button onclick="window.close()" class="px-4 py-2.5 bg-slate-200 text-slate-700 font-semibold rounded-lg">
+              Fermer
+            </button>
+          </div>
+          <div class="border-b pb-4 mb-4 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Imprimerie MBC Print Kinshasa</div>
+              <h1 class="text-xl font-black text-slate-900">Rapport Diagnostique de l'IA & Conseil de Gestion</h1>
+              <div class="text-xs text-slate-500 mt-1">Édité le ${analysisTimestamp || new Date().toLocaleDateString('fr-FR')}</div>
+            </div>
+            <div class="text-right text-xs">
+              <span class="inline-block px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold rounded border border-indigo-200">
+                ${activeShopId === 'lingwala' ? 'Site Lingwala' : activeShopId === 'limete' ? 'Site Limete' : 'Consolidé'}
+              </span>
+            </div>
+          </div>
+          <div class="prose max-w-none text-sm">
+            <div id="content"></div>
+          </div>
+          <script>
+            // Simple render helper for markdown text
+            const raw = ${JSON.stringify(analysisResult)};
+            // Basic text formatting for print window
+            let formatted = raw
+              .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+              .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+              .replace(/\\*\\*(.*?)\\*\\*/gim, '<strong>$1</strong>')
+              .replace(/\\*(.*?)\\*/gim, '<em>$1</em>')
+              .replace(/^\\- (.*$)/gim, '<li>$1</li>')
+              .replace(/\\n/g, '<br/>');
+            document.getElementById('content').innerHTML = formatted;
+            setTimeout(() => { window.print(); }, 400);
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const promptSuggestions = [
@@ -225,13 +365,14 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2.5 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-300 animate-pulse" />
-                Intelligence Artificielle Gemini 3.6
+                Intelligence Artificielle Gemini 3.8 Flash
               </span>
-              <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold">
-                Actif & Connecté
+              <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                Opérationnel & Connecté
               </span>
             </div>
             <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
@@ -260,7 +401,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
               ) : (
                 <>
                   <Zap className="w-4 h-4 text-amber-300" />
-                  <span>Générer l'Analyse IA</span>
+                  <span>Actualiser l'Analyse IA</span>
                 </>
               )}
             </button>
@@ -332,31 +473,85 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
       {activeSubTab === 'analysis' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
           
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-5 h-5 text-indigo-600" />
-              <h3 className="font-bold text-slate-900 text-base">Rapport Diagnostique de l'IA</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-base">Rapport Diagnostique de l'IA & Audit MBC Print</h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                {analysisSource === 'gemini' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                    ✨ Google Gemini 3.8 Flash
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
+                    📊 Moteur d'Audit Expert MBC
+                  </span>
+                )}
+                {analysisTimestamp && (
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Actualisé le {analysisTimestamp}
+                  </span>
+                )}
+              </div>
             </div>
             
             {analysisResult && (
-              <button
-                onClick={handleCopyAnalysis}
-                className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center space-x-1.5"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-emerald-600">Copié !</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Copier l'Analyse</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleCopyAnalysis}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  title="Copier le rapport"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-600">Copié !</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Copier</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handlePrintAnalysis}
+                  className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  title="Imprimer ou enregistrer en PDF"
+                >
+                  <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Imprimer / PDF</span>
+                </button>
+                <button
+                  onClick={handleGenerateAnalysis}
+                  disabled={isAnalyzing}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
+                  title="Rafraîchir avec les données actuelles"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  <span>Actualiser</span>
+                </button>
+              </div>
             )}
           </div>
+
+          {/* Optional notice banner */}
+          {analysisNotice && !isAnalyzing && (
+            <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-indigo-900 text-xs flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Lightbulb className="w-4 h-4 text-indigo-600 shrink-0" />
+                {analysisNotice}
+              </span>
+              <button 
+                onClick={handleGenerateAnalysis} 
+                className="text-indigo-700 hover:text-indigo-950 font-bold underline ml-2 shrink-0 cursor-pointer"
+              >
+                Relancer Gemini AI
+              </button>
+            </div>
+          )}
 
           {/* Loading State */}
           {isAnalyzing && (

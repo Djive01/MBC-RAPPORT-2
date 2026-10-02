@@ -13,13 +13,15 @@ import {
   Layers, 
   Award, 
   Sparkles,
-  BarChart2
+  BarChart2,
+  Receipt
 } from 'lucide-react';
 import { DateRangePicker } from './DateRangePicker';
 import { PrintableChartsSection } from './PrintableChartsSection';
 import { calculateAnalyticsData } from '../utils/analyticsUtils';
+import { aggregateReportsIncome, getCategoryMeta, STANDARD_INCOME_CATEGORIES } from '../data/incomeCategories';
 
-export type PrintDocumentMode = 'financial' | 'charts' | 'combined';
+export type PrintDocumentMode = 'financial' | 'daily' | 'charts' | 'combined';
 
 interface PrintReportViewProps {
   reports: DailyReportItem[];
@@ -36,6 +38,7 @@ interface PrintReportViewProps {
   endDate?: string;
   onDateRangeChange?: (start: string, end: string) => void;
   onClearDateRange?: () => void;
+  targetDayReport?: DailyReportItem | null;
   onClose: () => void;
 }
 
@@ -54,10 +57,26 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
   endDate = '',
   onDateRangeChange,
   onClearDateRange,
+  targetDayReport = null,
   onClose,
 }) => {
-  // Document mode: financial report, standalone charts, or combined
-  const [docMode, setDocMode] = useState<PrintDocumentMode>(initialMode);
+  // Document mode: financial report, standalone daily report, standalone charts, or combined
+  const [docMode, setDocMode] = useState<PrintDocumentMode>(targetDayReport ? 'daily' : initialMode);
+
+  // Selected single day for Daily Report mode
+  const [selectedDayDate, setSelectedDayDate] = useState<string>(() => {
+    return targetDayReport?.date || reports.find(r => !r.isRestDay)?.date || reports[0]?.date || '01/08/2026';
+  });
+
+  // Selected daily report item
+  const activeDailyReport = useMemo(() => {
+    return reports.find((r) => r.date === selectedDayDate) || targetDayReport || reports[0] || null;
+  }, [reports, selectedDayDate, targetDayReport]);
+
+  // Aggregate income breakdown across all selected reports
+  const incomeAggregate = useMemo(() => {
+    return aggregateReportsIncome(reports, exchangeRate);
+  }, [reports, exchangeRate]);
 
   // Chart configuration for print
   const [chartMetricMode, setChartMetricMode] = useState<'combUSD' | 'bidevise' | 'fc' | 'usd'>('combUSD');
@@ -322,16 +341,16 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
           <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700 text-xs">
             <button
               type="button"
-              onClick={() => setDocMode('charts')}
+              onClick={() => setDocMode('daily')}
               className={`px-3 py-1.5 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                docMode === 'charts'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                docMode === 'daily'
+                  ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
-              title="Imprimer uniquement les graphiques d'évolution et les pics d'activité à part"
+              title="Imprimer la feuille de caisse journalière avec détail complet des entrées"
             >
-              <TrendingUp className="w-3.5 h-3.5 text-indigo-300" />
-              <span>📈 Graphiques à part</span>
+              <Calendar className="w-3.5 h-3.5 text-emerald-300" />
+              <span>📅 Rapport Journalier</span>
             </button>
 
             <button
@@ -342,10 +361,24 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
-              title="Imprimer le rapport comptable synthétique chiffré"
+              title="Imprimer le rapport comptable synthétique chiffré de la période"
             >
               <FileText className="w-3.5 h-3.5 text-slate-300" />
-              <span>📋 Rapport Chiffré</span>
+              <span>📋 Rapport Périodique</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocMode('charts')}
+              className={`px-3 py-1.5 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                docMode === 'charts'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+              title="Imprimer uniquement les graphiques d'évolution et les pics d'activité à part"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-indigo-300" />
+              <span>📈 Graphiques</span>
             </button>
 
             <button
@@ -368,23 +401,44 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           
           <div className="flex flex-wrap items-center gap-2">
-            {/* Month Selector */}
-            <div className="flex items-center space-x-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>Mois :</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => onMonthChange && onMonthChange(e.target.value)}
-                className="bg-slate-900 font-bold text-white focus:outline-none cursor-pointer border border-slate-700 rounded px-1 py-0.5"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthLabel(m)}
-                  </option>
-                ))}
-                <option value="all">Tous les mois</option>
-              </select>
-            </div>
+            {/* Day Selector when in Daily mode */}
+            {docMode === 'daily' && (
+              <div className="flex items-center space-x-1.5 bg-emerald-950/90 border border-emerald-500/50 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-emerald-300 font-bold">Journée :</span>
+                <select
+                  value={selectedDayDate}
+                  onChange={(e) => setSelectedDayDate(e.target.value)}
+                  className="bg-slate-900 font-bold text-emerald-200 focus:outline-none cursor-pointer border border-emerald-500/50 rounded px-1.5 py-0.5"
+                >
+                  {reports.map((r) => (
+                    <option key={r.id || r.date} value={r.date}>
+                      {r.date} {r.isRestDay ? '(Repos)' : `— ${r.recettesFC > 0 ? formatFC(r.recettesFC) : ''} ${r.recettesUSD > 0 ? formatUSD(r.recettesUSD) : ''}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Month Selector when in financial/charts/combined mode */}
+            {docMode !== 'daily' && (
+              <div className="flex items-center space-x-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span>Mois :</span>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => onMonthChange && onMonthChange(e.target.value)}
+                  className="bg-slate-900 font-bold text-white focus:outline-none cursor-pointer border border-slate-700 rounded px-1 py-0.5"
+                >
+                  {availableMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {formatMonthLabel(m)}
+                    </option>
+                  ))}
+                  <option value="all">Tous les mois</option>
+                </select>
+              </div>
+            )}
 
             {/* Date Range Selector */}
             {onDateRangeChange && onClearDateRange && (
@@ -442,7 +496,13 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
             >
               <Printer className="w-4 h-4 text-emerald-100" />
               <span>
-                {docMode === 'charts' ? "Imprimer Graphiques" : docMode === 'financial' ? "Imprimer Rapport" : "Imprimer Dossier Complet"}
+                {docMode === 'daily'
+                  ? "Imprimer Rapport Journalier"
+                  : docMode === 'charts'
+                  ? "Imprimer Graphiques"
+                  : docMode === 'financial'
+                  ? "Imprimer Rapport Périodique"
+                  : "Imprimer Dossier Complet"}
               </span>
             </button>
 
@@ -489,18 +549,232 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
             <h2 className="text-lg font-extrabold text-slate-900 uppercase">
               {docMode === 'charts'
                 ? "RAPPORT ANALYTIQUE & GRAPHIQUES DES PICS"
+                : docMode === 'daily'
+                ? "FEUILLE DE CAISSE & RAPPORT JOURNALIER"
                 : docMode === 'financial'
                 ? `RAPPORT FINANCIER ${startDate || endDate ? 'PAR PÉRIODE' : 'MENSUEL'}`
                 : "DOSSIER COMPLET (FINANCIER & GRAPHIQUES)"}
             </h2>
             <p className="text-sm font-bold text-slate-700">
-              Période : {periodLabel}
+              {docMode === 'daily' ? `Journée du : ${activeDailyReport?.date || selectedDayDate}` : `Période : ${periodLabel}`}
             </p>
             <p className="text-[11px] text-slate-500 font-medium">
               Taux appliqué : 1$ = {exchangeRate} FC
             </p>
           </div>
         </div>
+
+        {/* ------------------------------------------------------------- */}
+        {/* STANDALONE DAILY REPORT SECTION ('daily')                     */}
+        {/* ------------------------------------------------------------- */}
+        {docMode === 'daily' && activeDailyReport && (
+          <div className="space-y-6">
+            {/* Banner info jour */}
+            <div className="bg-slate-50 border border-slate-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+              <div>
+                <span className="font-bold text-slate-900 text-sm">
+                  Rapport Journalier d'Activité du {activeDailyReport.date}
+                </span>
+                <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  {activeDailyReport.shopId === 'limete' ? 'Shop Limete' : 'Shop Lingwala'}
+                </span>
+                {activeDailyReport.isRestDay && (
+                  <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
+                    Jour de Repos (Dimanche)
+                  </span>
+                )}
+              </div>
+              <div className="font-mono text-xs">
+                <span className="text-slate-600 font-medium">Recette brute du jour : </span>
+                <span className="font-bold text-emerald-800">{formatFC(activeDailyReport.recettesFC)} / {formatUSD(activeDailyReport.recettesUSD)}</span>
+              </div>
+            </div>
+
+            {/* 1. Tableau Détaillé des Entrées par Prestation */}
+            <div>
+              <div className="border-b border-slate-300 pb-1 mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>1. Ventilation des Entrées & Prestations Encaissées</span>
+                </h3>
+                <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Leur total donne la recette de la journée
+                </span>
+              </div>
+
+              <table className="w-full text-left border-collapse text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
+                  <tr>
+                    <th className="p-2 border border-slate-300 text-center w-10">N°</th>
+                    <th className="p-2 border border-slate-300">Prestation / Service</th>
+                    <th className="p-2 border border-slate-300">Détails, Spécifications & Motifs</th>
+                    <th className="p-2 border border-slate-300 text-right">Francs (FC)</th>
+                    <th className="p-2 border border-slate-300 text-right">Dollars ($ USD)</th>
+                    <th className="p-2 border border-slate-300 text-right">Total Équiv. ($)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300 font-medium">
+                  {(() => {
+                    const validIncomes = activeDailyReport.incomeItems && activeDailyReport.incomeItems.length > 0
+                      ? activeDailyReport.incomeItems
+                      : STANDARD_INCOME_CATEGORIES.map((c) => ({
+                          id: c.key,
+                          category: c.name,
+                          motif: c.key === 'impression_photocopie' ? 'Recette journalière directe' : '',
+                          amountFC: c.key === 'impression_photocopie' ? activeDailyReport.recettesFC : 0,
+                          amountUSD: c.key === 'impression_photocopie' ? activeDailyReport.recettesUSD : 0,
+                        }));
+
+                    return validIncomes.map((inc, idx) => {
+                      const meta = getCategoryMeta(inc.category);
+                      const equiv = (Number(inc.amountUSD) || 0) + ((Number(inc.amountFC) || 0) / exchangeRate);
+                      return (
+                        <tr key={inc.id || idx} className={(inc.amountFC > 0 || inc.amountUSD > 0) ? 'bg-emerald-50/20' : ''}>
+                          <td className="p-2 border border-slate-300 text-center font-bold text-slate-500">{idx + 1}</td>
+                          <td className="p-2 border border-slate-300 font-bold text-slate-900">
+                            <span className="mr-1.5 select-none">{meta.icon}</span>
+                            <span>{inc.category}</span>
+                          </td>
+                          <td className="p-2 border border-slate-300 text-slate-700 italic">
+                            {inc.motif || (inc.amountFC > 0 || inc.amountUSD > 0 ? 'Prestation enregistrée' : '-')}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-right font-semibold">
+                            {inc.amountFC > 0 ? formatFC(inc.amountFC) : '-'}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-right font-bold text-emerald-800">
+                            {inc.amountUSD > 0 ? formatUSD(inc.amountUSD) : '-'}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-right font-mono text-slate-600">
+                            {equiv > 0 ? `$${equiv.toFixed(2)}` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+                <tfoot className="bg-slate-100 font-black text-xs">
+                  <tr className="border-t-2 border-slate-900">
+                    <td colSpan={3} className="p-2.5 border border-slate-300 uppercase">
+                      TOTAL RECETTE DE LA JOURNÉE (SOMME DES ENTRÉES)
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900">
+                      {formatFC(activeDailyReport.recettesFC)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900">
+                      {formatUSD(activeDailyReport.recettesUSD)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900 font-mono">
+                      ${(activeDailyReport.recettesUSD + activeDailyReport.recettesFC / exchangeRate).toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* 2. Tableau Détaillé des Dépenses de la Journée */}
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-3 flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-rose-600" />
+                <span>2. Dépenses Opérationnelles Consignées du Jour</span>
+              </h3>
+              <table className="w-full text-left border-collapse text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
+                  <tr>
+                    <th className="p-2 border border-slate-300 text-center w-10">N°</th>
+                    <th className="p-2 border border-slate-300">Motif & Justification de la Dépense</th>
+                    <th className="p-2 border border-slate-300 text-right">Francs (FC)</th>
+                    <th className="p-2 border border-slate-300 text-right">Dollars ($ USD)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300 font-medium">
+                  {(!activeDailyReport.expenseItems || activeDailyReport.expenseItems.length === 0) ? (
+                    <tr>
+                      {activeDailyReport.depensesFC > 0 || activeDailyReport.depensesUSD > 0 ? (
+                        <>
+                          <td className="p-2 border border-slate-300 text-center font-bold">1</td>
+                          <td className="p-2 border border-slate-300 text-slate-900 font-semibold">{activeDailyReport.motifDepenses || 'Dépenses courantes'}</td>
+                          <td className="p-2 border border-slate-300 text-right text-rose-800">{activeDailyReport.depensesFC > 0 ? formatFC(activeDailyReport.depensesFC) : '-'}</td>
+                          <td className="p-2 border border-slate-300 text-right text-rose-800 font-semibold">{activeDailyReport.depensesUSD > 0 ? formatUSD(activeDailyReport.depensesUSD) : '-'}</td>
+                        </>
+                      ) : (
+                        <td colSpan={4} className="p-3 text-center text-slate-400 italic">
+                          Aucune sortie de caisse ni dépense consignée pour cette journée.
+                        </td>
+                      )}
+                    </tr>
+                  ) : (
+                    activeDailyReport.expenseItems.map((exp, idx) => (
+                      <tr key={exp.id || idx}>
+                        <td className="p-2 border border-slate-300 text-center font-bold text-slate-500">{idx + 1}</td>
+                        <td className="p-2 border border-slate-300 text-slate-900 font-semibold">{exp.motif || 'Dépense'}</td>
+                        <td className="p-2 border border-slate-300 text-right text-rose-800 font-semibold">{exp.amountFC > 0 ? formatFC(exp.amountFC) : '-'}</td>
+                        <td className="p-2 border border-slate-300 text-right text-rose-800 font-bold">{exp.amountUSD > 0 ? formatUSD(exp.amountUSD) : '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-100 font-black text-xs">
+                  <tr className="border-t-2 border-slate-900">
+                    <td colSpan={2} className="p-2.5 border border-slate-300 uppercase">
+                      TOTAL DÉPENSES DE LA JOURNÉE
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-rose-900">
+                      {formatFC(activeDailyReport.depensesFC)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-rose-900">
+                      {formatUSD(activeDailyReport.depensesUSD)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* 3. Synthèse des Soldes du Jour */}
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-3">
+                3. Bilan & Solde Net de la Journée
+              </h3>
+              <table className="w-full text-left border-collapse text-xs sm:text-sm border border-slate-300">
+                <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
+                  <tr>
+                    <th className="p-2.5 border border-slate-300">Indicateur Journalier</th>
+                    <th className="p-2.5 border border-slate-300 text-right">Francs (FC)</th>
+                    <th className="p-2.5 border border-slate-300 text-right">Dollars ($ USD)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300 font-semibold">
+                  <tr>
+                    <td className="p-2.5 border border-slate-300 font-bold text-slate-900">Total Recette Réalisée</td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-800">{formatFC(activeDailyReport.recettesFC)}</td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-800">{formatUSD(activeDailyReport.recettesUSD)}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2.5 border border-slate-300 font-bold text-slate-900">Total Dépenses Consommées</td>
+                    <td className="p-2.5 border border-slate-300 text-right text-rose-800">{formatFC(activeDailyReport.depensesFC)}</td>
+                    <td className="p-2.5 border border-slate-300 text-right text-rose-800">{formatUSD(activeDailyReport.depensesUSD)}</td>
+                  </tr>
+                  <tr className="bg-slate-100 font-extrabold text-blue-950">
+                    <td className="p-2.5 border border-slate-300 uppercase">SOLDE NET THÉORIQUE DU JOUR</td>
+                    <td className="p-2.5 border border-slate-300 text-right font-black">
+                      {formatFC(activeDailyReport.recettesFC - activeDailyReport.depensesFC)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right font-black">
+                      {formatUSD(activeDailyReport.recettesUSD - activeDailyReport.depensesUSD)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Notes / Remarques de la journée */}
+            {activeDailyReport.notes && (
+              <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs">
+                <span className="font-bold text-amber-900">Remarques / Événements du jour : </span>
+                <span className="text-amber-800">{activeDailyReport.notes}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ------------------------------------------------------------- */}
         {/* FINANCIAL REPORT SECTION (Shown in 'financial' or 'combined') */}
@@ -541,10 +815,79 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               </table>
             </div>
 
-            {/* 2. Tableau Détaillé des Dépenses par Rubrique */}
+            {/* 2. Tableau Détaillé des Entrées par Prestation / Service */}
+            <div>
+              <div className="border-b border-slate-300 pb-1 mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>2. Tableau Détaillé des Entrées par Prestation ({periodLabel})</span>
+                </h3>
+                <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Somme = Recette Totale
+                </span>
+              </div>
+              <table className="w-full text-left border-collapse text-xs border border-slate-300">
+                <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
+                  <tr>
+                    <th className="p-2 border border-slate-300">Prestation / Service</th>
+                    <th className="p-2 border border-slate-300">Motifs & Commandes Clés</th>
+                    <th className="p-2 border border-slate-300 text-right">Francs (FC)</th>
+                    <th className="p-2 border border-slate-300 text-right">Dollars ($ USD)</th>
+                    <th className="p-2 border border-slate-300 text-right">Total Équiv. ($)</th>
+                    <th className="p-2 border border-slate-300 text-right">Part (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300 font-medium">
+                  {incomeAggregate.categories.map((c) => (
+                    <tr key={c.key} className={(c.amountFC > 0 || c.amountUSD > 0) ? 'bg-emerald-50/10' : ''}>
+                      <td className="p-2 border border-slate-300 font-bold text-slate-900">
+                        <span className="mr-1.5 select-none">{c.icon}</span>
+                        <span>{c.name}</span>
+                      </td>
+                      <td className="p-2 border border-slate-300 text-slate-600 italic">
+                        {c.motifs.length > 0 ? c.motifs.slice(0, 3).join(', ') : (c.amountFC > 0 || c.amountUSD > 0 ? 'Prestations courantes' : '-')}
+                      </td>
+                      <td className="p-2 border border-slate-300 text-right font-semibold">
+                        {c.amountFC > 0 ? formatFC(c.amountFC) : '-'}
+                      </td>
+                      <td className="p-2 border border-slate-300 text-right font-bold text-emerald-800">
+                        {c.amountUSD > 0 ? formatUSD(c.amountUSD) : '-'}
+                      </td>
+                      <td className="p-2 border border-slate-300 text-right font-mono text-slate-700">
+                        {c.equivUSD > 0 ? `$${c.equivUSD.toFixed(2)}` : '-'}
+                      </td>
+                      <td className="p-2 border border-slate-300 text-right font-mono font-bold text-indigo-700">
+                        {c.percentage > 0 ? `${c.percentage.toFixed(1)}%` : '0%'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-100 font-black text-xs">
+                  <tr className="border-t-2 border-slate-900">
+                    <td colSpan={2} className="p-2.5 border border-slate-300 uppercase">
+                      TOTAL RECETTES (SOMME DES ENTRÉES)
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900">
+                      {formatFC(sumRecettesFC)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900">
+                      {formatUSD(sumRecettesUSD)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-emerald-900 font-mono">
+                      ${(sumRecettesUSD + sumRecettesFC / exchangeRate).toFixed(2)}
+                    </td>
+                    <td className="p-2.5 border border-slate-300 text-right text-indigo-900 font-mono">
+                      100.0%
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* 3. Tableau Détaillé des Dépenses par Rubrique */}
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-3">
-                2. Tableau Détaillé des Dépenses par Rubrique ({formatMonthLabel(selectedMonth)})
+                3. Tableau Détaillé des Dépenses par Rubrique ({formatMonthLabel(selectedMonth)})
               </h3>
               <table className="w-full text-left border-collapse text-xs border border-slate-300">
                 <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
@@ -583,10 +926,10 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               </table>
             </div>
 
-            {/* 3. Relevé Chronologique des Motifs de Dépenses */}
+            {/* 4. Relevé Chronologique des Motifs de Dépenses */}
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-3">
-                3. Relevé Chronologique des Motifs de Dépenses ({formatMonthLabel(selectedMonth)})
+                4. Relevé Chronologique des Motifs de Dépenses ({formatMonthLabel(selectedMonth)})
               </h3>
               <table className="w-full text-left border-collapse text-xs border border-slate-300">
                 <thead className="bg-slate-100 font-bold text-slate-800 uppercase">
@@ -618,10 +961,10 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               </table>
             </div>
 
-            {/* 4. Créances Clients & Avances */}
+            {/* 5. Créances Clients & Avances */}
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-3">
-                4. Créances Clients & Disponibilités Réelles
+                5. Créances Clients & Disponibilités Réelles
               </h3>
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-2">
                 <div>

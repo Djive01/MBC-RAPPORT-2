@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Search, 
   Plus, 
@@ -8,19 +8,22 @@ import {
   Calendar, 
   CalendarOff, 
   CheckCircle2, 
-  Sparkles,
-  Download,
-  ArrowUpDown,
-  Lock,
-  ChevronDown,
-  ChevronUp,
-  Receipt
+  Sparkles, 
+  Download, 
+  ArrowUpDown, 
+  Lock, 
+  ChevronDown, 
+  ChevronUp, 
+  Receipt, 
+  Calculator,
+  Printer
 } from 'lucide-react';
 import { DailyReportItem, UserAccount } from '../types';
 import { formatFC, formatUSD } from '../utils/formatters';
 import { PasswordPromptModal } from './PasswordPromptModal';
 import { formatMonthLabel, parseDateToTimestamp } from '../utils/monthUtils';
 import { DateRangePicker } from './DateRangePicker';
+import { getCategoryMeta, aggregateReportsIncome } from '../data/incomeCategories';
 
 interface DailyJournalTableProps {
   reports: DailyReportItem[];
@@ -37,6 +40,8 @@ interface DailyJournalTableProps {
   onClearDateRange?: () => void;
   currentUser?: UserAccount | null;
   accounts?: UserAccount[];
+  onReconcileDayCash?: (report: DailyReportItem) => void;
+  onPrintDayReport?: (report: DailyReportItem) => void;
 }
 
 export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
@@ -54,10 +59,13 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
   onClearDateRange,
   currentUser,
   accounts = [],
+  onReconcileDayCash,
+  onPrintDayReport,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'work' | 'rest' | 'has_expenses' | 'high_revenue'>('all');
   const [sortAscending, setSortAscending] = useState(true);
+  const [showIncomeSummary, setShowIncomeSummary] = useState(true);
 
   // Password Prompt modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -121,6 +129,11 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
 
   const soldeFC = sumRecettesFC - sumDepensesFC;
   const soldeUSD = sumRecettesUSD - sumDepensesUSD;
+
+  // Aggregate income breakdown for the current period
+  const incomeSummary = useMemo(() => {
+    return aggregateReportsIncome(filteredReports, exchangeRate);
+  }, [filteredReports, exchangeRate]);
 
   // Export CSV helper
   const exportCSV = () => {
@@ -298,6 +311,71 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
         </div>
       </div>
 
+      {/* SECTION VENTILATION CONSOLIDÉE DES ENTRÉES PAR PRESTATION */}
+      <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white px-6 py-3 border-b border-emerald-900/50">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center space-x-2.5">
+            <span className="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg border border-emerald-400/20">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-extrabold text-xs sm:text-sm text-emerald-100 uppercase tracking-wider">
+                  Ventilation des Entrées ({filteredReports.length} journées)
+                </h4>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold border border-emerald-400/30">
+                  Somme = Recette Totale
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 hidden sm:block mt-0.5">
+                Impression & photocopie, DTF, Bâche, Polo, Fourniture et Autres prestations encaissées
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            <div className="text-right font-mono bg-black/40 px-3 py-1 rounded-lg border border-emerald-500/30">
+              <div className="text-[10px] text-emerald-300 uppercase font-bold">Total Recettes Période</div>
+              <div className="text-xs sm:text-sm font-black text-white">
+                {formatFC(sumRecettesFC)} / {formatUSD(sumRecettesUSD)}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowIncomeSummary(!showIncomeSummary)}
+              className="p-1.5 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+              title={showIncomeSummary ? "Masquer la ventilation" : "Afficher la ventilation"}
+            >
+              {showIncomeSummary ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {showIncomeSummary && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-2.5 pt-2.5 border-t border-emerald-800/40">
+            {incomeSummary.categories.map((cat) => (
+              <div
+                key={cat.key}
+                className="bg-slate-900/90 p-2 rounded-lg border border-emerald-500/20 shadow-inner flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between text-xs font-bold text-slate-200 mb-1">
+                  <span className="flex items-center gap-1 truncate" title={cat.name}>
+                    <span className="text-sm select-none">{cat.icon}</span>
+                    <span className="truncate">{cat.name}</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                    {cat.percentage > 0 ? `${cat.percentage.toFixed(0)}%` : '0%'}
+                  </span>
+                </div>
+                <div className="text-right font-mono text-[11px]">
+                  <div className="text-slate-100 font-bold">{cat.amountFC > 0 ? formatFC(cat.amountFC) : '0 FC'}</div>
+                  <div className="text-emerald-400 font-bold">{cat.amountUSD > 0 ? formatUSD(cat.amountUSD) : '$0.00'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Main Table */}
       <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
@@ -328,7 +406,9 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
                 const daySoldeFC = row.recettesFC - row.depensesFC;
                 const daySoldeUSD = row.recettesUSD - row.depensesUSD;
                 const isHighRevenue = row.recettesFC >= 300000 || row.recettesUSD >= 100;
-                const hasMultipleExpenses = row.expenseItems && row.expenseItems.length > 0;
+                const hasMultipleExpenses = !!(row.expenseItems && row.expenseItems.length > 0);
+                const validIncomes = row.incomeItems?.filter(i => (i.amountFC > 0 || i.amountUSD > 0 || i.motif?.trim())) || [];
+                const hasMultipleIncomes = validIncomes.length > 0;
                 const isExpanded = expandedRowId === row.id;
 
                 return (
@@ -374,13 +454,65 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
                       </td>
 
                       {/* Recettes FC */}
-                      <td className="px-6 py-3">
-                        {row.recettesFC > 0 ? formatFC(row.recettesFC) : <span className="text-slate-300">-</span>}
+                      <td className="px-6 py-3 font-medium">
+                        {row.recettesFC > 0 ? (
+                          <div>
+                            <span className="font-bold text-slate-900">{formatFC(row.recettesFC)}</span>
+                            {validIncomes.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {validIncomes.filter(i => i.amountFC > 0).slice(0, 3).map((inc, idx) => {
+                                  const meta = getCategoryMeta(inc.category);
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-700 font-semibold"
+                                      title={`${inc.category}: ${formatFC(inc.amountFC)}`}
+                                    >
+                                      <span>{meta.icon}</span>
+                                      <span>{formatFC(inc.amountFC)}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ) : <span className="text-slate-300">-</span>}
                       </td>
 
                       {/* Recettes USD */}
-                      <td className="px-6 py-3 font-mono text-emerald-600">
-                        {row.recettesUSD > 0 ? formatUSD(row.recettesUSD) : <span className="text-slate-300">-</span>}
+                      <td className="px-6 py-3 font-mono text-emerald-600 font-medium">
+                        <div className="flex flex-col items-start">
+                          <span>{row.recettesUSD > 0 ? formatUSD(row.recettesUSD) : <span className="text-slate-300">-</span>}</span>
+                          {validIncomes.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {validIncomes.filter(i => i.amountUSD > 0).slice(0, 3).map((inc, idx) => {
+                                const meta = getCategoryMeta(inc.category);
+                                return (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] bg-emerald-50 text-emerald-800 font-bold border border-emerald-200"
+                                    title={`${inc.category}: ${formatUSD(inc.amountUSD)}`}
+                                  >
+                                    <span>{meta.icon}</span>
+                                    <span>{formatUSD(inc.amountUSD)}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {hasMultipleIncomes && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRowId(isExpanded ? null : row.id)}
+                              className="inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-colors gap-1 cursor-pointer"
+                              title="Voir la ventilation des prestations encaissées"
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>{validIncomes.length} prestation{validIncomes.length > 1 ? 's' : ''}</span>
+                              {isExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Dépenses FC */}
@@ -435,6 +567,24 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
                       {/* Actions with Password Lock */}
                       <td className="px-6 py-3 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
+                          {onPrintDayReport && !row.isRestDay && (
+                            <button
+                              onClick={() => onPrintDayReport(row)}
+                              className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all flex items-center space-x-1 cursor-pointer"
+                              title={`Imprimer le rapport de caisse officiel du ${row.date} avec détail des entrées`}
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {onReconcileDayCash && !row.isRestDay && (
+                            <button
+                              onClick={() => onReconcileDayCash(row)}
+                              className="p-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all flex items-center space-x-1 cursor-pointer"
+                              title="Contrôler & Rapprocher la caisse de cette journée"
+                            >
+                              <Calculator className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleRequestEdit(row)}
                             className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center space-x-1 cursor-pointer"
@@ -455,48 +605,110 @@ export const DailyJournalTable: React.FC<DailyJournalTableProps> = ({
                       </td>
                     </tr>
 
-                    {/* EXPANDED MULTI-EXPENSE DETAILS ROW */}
-                    {isExpanded && hasMultipleExpenses && (
-                      <tr className="bg-rose-50/40 border-b border-rose-100">
-                        <td colSpan={11} className="px-8 py-3">
-                          <div className="bg-white p-3 rounded-xl border border-rose-200 shadow-inner space-y-2">
-                            <div className="flex items-center justify-between border-b border-rose-100 pb-2">
-                              <h5 className="font-bold text-xs text-rose-900 flex items-center gap-1.5">
-                                <Receipt className="w-4 h-4 text-rose-600" />
-                                Détail des dépenses du {row.date} ({row.expenseItems?.length} postes enregistrés)
-                              </h5>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-[11px] text-rose-700 font-bold">
-                                  Total: {formatFC(row.depensesFC)} / {formatUSD(row.depensesUSD)}
-                                </span>
-                                <button
-                                  onClick={() => handleRequestEdit(row)}
-                                  className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Edit className="w-3 h-3" />
-                                  <span>Modifier le rapport</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {row.expenseItems?.map((expItem, idx) => (
-                                <div key={expItem.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs flex items-center justify-between shadow-2xs">
-                                  <div>
-                                    <span className="font-bold text-slate-800 block text-xs">{expItem.motif || 'Poste sans libellé'}</span>
-                                    <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
-                                      <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-                                      <span>Date: <strong className="text-slate-700">{row.date}</strong></span>
-                                      <span>•</span>
-                                      <span>N°{idx + 1}</span>
+                    {/* EXPANDED DETAILS ROW (RECETTES & DÉPENSES) */}
+                    {isExpanded && (hasMultipleIncomes || hasMultipleExpenses) && (
+                      <tr className="bg-slate-50/70 border-b border-slate-200">
+                        <td colSpan={11} className="px-6 py-3.5">
+                          <div className="space-y-3">
+                            {/* SECTION 1: DÉTAIL DES RECETTES PAR PRESTATION */}
+                            {hasMultipleIncomes && (
+                              <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-2xs space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                                  <h5 className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                                    <span>Ventilation des Entrées & Prestations ({validIncomes.length} service{validIncomes.length > 1 ? 's' : ''} encaissé{validIncomes.length > 1 ? 's' : ''})</span>
+                                  </h5>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                      Total Recettes : {formatFC(row.recettesFC)} / {formatUSD(row.recettesUSD)}
                                     </span>
-                                  </div>
-                                  <div className="text-right">
-                                    {expItem.amountFC > 0 && <div className="font-bold text-slate-900">{formatFC(expItem.amountFC)}</div>}
-                                    {expItem.amountUSD > 0 && <div className="font-bold text-rose-600 font-mono">{formatUSD(expItem.amountUSD)}</div>}
+                                    <button
+                                      onClick={() => handleRequestEdit(row)}
+                                      className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                      <span>Modifier</span>
+                                    </button>
                                   </div>
                                 </div>
-                              ))}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {validIncomes.map((incItem, idx) => {
+                                    const meta = getCategoryMeta(incItem.category);
+                                    return (
+                                      <div
+                                        key={incItem.id || idx}
+                                        className="p-2.5 bg-emerald-50/40 rounded-lg border border-emerald-100/90 text-xs flex items-center justify-between shadow-2xs"
+                                      >
+                                        <div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-base select-none">{meta.icon}</span>
+                                            <span className="font-bold text-slate-800">{incItem.category}</span>
+                                          </div>
+                                          {incItem.motif && (
+                                            <div className="text-[11px] text-slate-600 mt-0.5 font-medium italic">
+                                              {incItem.motif}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="text-right shrink-0 ml-2">
+                                          {incItem.amountFC > 0 && <div className="font-bold text-slate-900">{formatFC(incItem.amountFC)}</div>}
+                                          {incItem.amountUSD > 0 && <div className="font-bold text-emerald-600 font-mono">{formatUSD(incItem.amountUSD)}</div>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* SECTION 2: DÉTAIL DES DÉPENSES */}
+                            {hasMultipleExpenses && (
+                              <div className="bg-white p-3.5 rounded-xl border border-rose-200 shadow-2xs space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-rose-100 pb-2">
+                                  <h5 className="font-bold text-xs text-rose-900 flex items-center gap-1.5">
+                                    <Receipt className="w-4 h-4 text-rose-600" />
+                                    <span>Détail des dépenses du {row.date} ({row.expenseItems?.length} postes enregistrés)</span>
+                                  </h5>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-[11px] text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                      Total Dépenses : {formatFC(row.depensesFC)} / {formatUSD(row.depensesUSD)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {row.expenseItems?.map((expItem, idx) => (
+                                    <div key={expItem.id || idx} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs flex items-center justify-between shadow-2xs">
+                                      <div>
+                                        <span className="font-bold text-slate-800 block text-xs">{expItem.motif || 'Poste sans libellé'}</span>
+                                        <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
+                                          <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+                                          <span>Date: <strong className="text-slate-700">{row.date}</strong></span>
+                                          <span>•</span>
+                                          <span>N°{idx + 1}</span>
+                                        </span>
+                                      </div>
+                                      <div className="text-right shrink-0 ml-2">
+                                        {expItem.amountFC > 0 && <div className="font-bold text-slate-900">{formatFC(expItem.amountFC)}</div>}
+                                        {expItem.amountUSD > 0 && <div className="font-bold text-rose-600 font-mono">{formatUSD(expItem.amountUSD)}</div>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* SECTION 3: SYNTHÈSE DU BILAN JOURNALIER */}
+                            <div className="bg-slate-100/80 px-3 py-2 rounded-lg flex flex-wrap items-center justify-between text-xs font-semibold text-slate-700 gap-2 border border-slate-200">
+                              <span>Bilan Journalier {row.date} ({row.shopId.toUpperCase()}) :</span>
+                              <div className="flex items-center gap-3">
+                                <span>Recettes : <strong className="text-emerald-700">{formatFC(row.recettesFC)} / {formatUSD(row.recettesUSD)}</strong></span>
+                                <span>-</span>
+                                <span>Dépenses : <strong className="text-rose-700">{formatFC(row.depensesFC)} / {formatUSD(row.depensesUSD)}</strong></span>
+                                <span>=</span>
+                                <span>Solde Net : <strong className={daySoldeUSD >= 0 ? 'text-indigo-700 font-bold' : 'text-rose-700 font-bold'}>{formatFC(daySoldeFC)} / {formatUSD(daySoldeUSD)}</strong></span>
+                              </div>
                             </div>
                           </div>
                         </td>
